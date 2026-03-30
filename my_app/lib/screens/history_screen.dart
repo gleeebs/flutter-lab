@@ -38,9 +38,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
   }
 
   void _onHistoryItemTap(String item) {
-    // Проверяем, является ли запись операцией конвертера
     if (item.contains('→')) {
-      // Это конвертер: формат "1000 RUB → 10.92 USD"
       final parts = item.split(' → ');
       if (parts.length == 2) {
         final amountPart = parts[0].split(' ');
@@ -51,7 +49,6 @@ class _HistoryScreenState extends State<HistoryScreen> {
           final fromCurrency = amountPart[1];
           final toCurrency = resultPart[1];
           
-          // Передаём данные в конвертер
           Navigator.pushReplacement(
             context,
             MaterialPageRoute(
@@ -68,7 +65,6 @@ class _HistoryScreenState extends State<HistoryScreen> {
         }
       }
     } else {
-      // Это калькулятор: формат "15 + 27 = 42"
        final parts = item.split(' = ');
     if (parts.length == 2) {
       final expression = parts[0];

@@ -30,6 +30,7 @@ class ConverterScreen extends StatefulWidget {
 class _ConverterScreenState extends State<ConverterScreen> {
   ConverterViewModel? _viewModel;
   bool _isLoading = true;
+  final TextEditingController _amountController = TextEditingController();
 
   @override
   void initState() {
@@ -47,6 +48,7 @@ class _ConverterScreenState extends State<ConverterScreen> {
     
     if (widget.initialAmount != null) {
       viewModel.amount = widget.initialAmount!;
+      _amountController.text = widget.initialAmount!;
     }
     if (widget.initialFromCurrency != null) {
       viewModel.fromCurrency = widget.initialFromCurrency!;
@@ -64,6 +66,21 @@ class _ConverterScreenState extends State<ConverterScreen> {
       _viewModel = viewModel;
       _isLoading = false;
     });
+  }
+
+  @override
+  void dispose() {
+    _amountController.dispose();
+    super.dispose();
+  }
+
+  void _convertAndSave() {
+    _viewModel!.convert();
+    _viewModel!.saveToHistory();
+    setState(() {});
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Сохранено в историю')),
+    );
   }
 
   @override
@@ -107,36 +124,42 @@ class _ConverterScreenState extends State<ConverterScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            TextField(
-              decoration: InputDecoration(
-                labelText: 'Сумма',
-                hintText: 'Введите сумму',
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _amountController,
+                    decoration: InputDecoration(
+                      labelText: 'Сумма',
+                      hintText: 'Введите сумму',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      filled: true,
+                      fillColor: Colors.grey.shade50,
+                    ),
+                    keyboardType: TextInputType.number,
+                  ),
                 ),
-                filled: true,
-                fillColor: Colors.grey.shade50,
-                suffixIcon: _viewModel!.amount.isNotEmpty && _viewModel!.amount != '0'
-                    ? IconButton(
-                        icon: const Icon(Icons.clear, size: 20),
-                        onPressed: () {
-                          _viewModel!.updateAmount('0');
-                          setState(() {});
-                        },
-                      )
-                    : null,
-              ),
-              keyboardType: TextInputType.number,
-              controller: TextEditingController(text: _viewModel!.amount),
-              onChanged: (value) {
-                String filtered = value.replaceAll(RegExp(r'[^0-9.]'), '');
-                if (filtered.contains('.') && filtered.indexOf('.') != filtered.lastIndexOf('.')) {
-                  filtered = filtered.substring(0, filtered.lastIndexOf('.'));
-                }
-                if (filtered.isEmpty) filtered = '0';
-                _viewModel!.updateAmount(filtered);
-                setState(() {});
-              },
+                const SizedBox(width: 12),
+                ElevatedButton(
+                  onPressed: () {
+                    String value = _amountController.text;
+                    if (value.isEmpty) value = '0';
+                    _viewModel!.updateAmount(value);
+                    setState(() {});
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blue.shade600,
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  child: const Text('Установить', style: TextStyle(fontSize: 14)),
+                ),
+              ],
             ),
             const SizedBox(height: 20),
             
@@ -190,24 +213,17 @@ class _ConverterScreenState extends State<ConverterScreen> {
             ),
             const SizedBox(height: 20),
             
-            ElevatedButton.icon(
-              onPressed: () async {
-                await _viewModel!.saveToHistory();
-                setState(() {});
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Сохранено в историю')),
-                );
-              },
-              icon: const Icon(Icons.save),
-              label: const Text('Сохранить результат в историю'),
+            ElevatedButton(
+              onPressed: _convertAndSave,
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.green.shade600,
                 foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 12),
+                padding: const EdgeInsets.symmetric(vertical: 16),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
               ),
+              child: const Text('Сохранить в историю', style: TextStyle(fontSize: 16)),
             ),
             const SizedBox(height: 30),
             

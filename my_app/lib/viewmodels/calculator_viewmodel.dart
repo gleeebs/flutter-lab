@@ -71,7 +71,6 @@ class CalculatorViewModel {
       String expression = '${_formatNumber(num)}%';
       String resultStr = _formatNumber(result);
       
-      // Сохраняем в историю
       _saveToHistory(expression, resultStr);
       
       _display = resultStr;
@@ -119,7 +118,6 @@ class CalculatorViewModel {
         String expression = '√${_formatNumber(num)}';
         String resultStr = _formatNumber(result);
         
-        // Сохраняем в историю
         _saveToHistory(expression, resultStr);
         
         _display = resultStr;
@@ -179,7 +177,6 @@ class CalculatorViewModel {
       String fullExpression = '${_formatNumber(_firstNumber!)} $_currentOperation ${_formatNumber(secondNumber)}';
       String resultStr = _formatNumber(result);
       
-      // Сохраняем в историю
       await _saveToHistory(fullExpression, resultStr);
       
       _expression = fullExpression;
@@ -202,7 +199,6 @@ class CalculatorViewModel {
     if (num == num.toInt()) {
       return num.toInt().toString();
     }
-    // Ограничиваем до 10 знаков после запятой
     String str = num.toString();
     if (str.contains('.') && str.length > 15) {
       str = num.toStringAsFixed(10);

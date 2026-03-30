@@ -39,7 +39,6 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
     final viewModel = CalculatorViewModel(historyRepository: repo);
     await viewModel.loadHistory();
     
-    // Если есть начальные значения из истории
     if (widget.initialExpression != null && widget.initialResult != null) {
       viewModel.setExpressionAndResult(widget.initialExpression!, widget.initialResult!);
     }
@@ -82,14 +81,12 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
       ),
       body: Column(
         children: [
-          // Дисплей с двумя строками
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
             width: double.infinity,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                // Маленькая строка с выражением
                 Text(
                   _viewModel!.expression,
                   style: TextStyle(
@@ -100,7 +97,6 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
                   overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 8),
-                // Большая строка с результатом
                 Text(
                   _viewModel!.displayValue,
                   style: const TextStyle(
@@ -115,7 +111,6 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
             ),
           ),
           
-          // Кнопки
           Expanded(
             child: Padding(
               padding: const EdgeInsets.all(12),
