@@ -3,7 +3,8 @@ import 'calculator_screen.dart';
 import 'history_screen.dart';
 
 class ConverterScreen extends StatefulWidget {
-  const ConverterScreen({super.key});
+  final List<String> history;
+  const ConverterScreen({super.key, required this.history});
 
   @override
   State<ConverterScreen> createState() => _ConverterScreenState();
@@ -14,8 +15,21 @@ class _ConverterScreenState extends State<ConverterScreen> {
   String toCurrency = 'USD';
   String amount = '1000';
   String result = '0.00';
-
-  // 10 основных валют, поддерживаемых ExchangeRate-API
+  
+  // Примерные курсы для демонстрации (без API)
+  final Map<String, double> rates = {
+    'RUB': 1.0,
+    'USD': 0.011,
+    'EUR': 0.010,
+    'GBP': 0.0086,
+    'CNY': 0.079,
+    'JPY': 1.64,
+    'KRW': 16.0,
+    'TRY': 0.41,
+    'KZT': 5.8,
+    'CHF': 0.0098,
+  };
+  
   final Map<String, String> currencies = {
     'RUB': '🇷🇺 Российский рубль',
     'USD': '🇺🇸 Доллар США',
@@ -31,23 +45,34 @@ class _ConverterScreenState extends State<ConverterScreen> {
 
   void _convert() {
     double amountNum = double.tryParse(amount) ?? 0;
-    // Примерные курсы для демонстрации
-    Map<String, double> rates = {
-      'RUB': 1.0,
-      'USD': 0.011,
-      'EUR': 0.010,
-      'GBP': 0.0086,
-      'CNY': 0.079,
-      'JPY': 1.64,
-      'KRW': 16.0,
-      'TRY': 0.41,
-      'KZT': 5.8,
-      'CHF': 0.015,
-    };
     
-    double rate = rates[toCurrency]! / rates[fromCurrency]!;
-    result = (amountNum * rate).toStringAsFixed(2);
+    if (fromCurrency == toCurrency) {
+      result = amountNum.toStringAsFixed(2);
+    } else if (rates.containsKey(fromCurrency) && rates.containsKey(toCurrency)) {
+      // Конвертируем через RUB как базовую валюту
+      double inRub = amountNum / rates[fromCurrency]!;
+      double converted = inRub * rates[toCurrency]!;
+      result = converted.toStringAsFixed(2);
+    } else {
+      result = 'Ошибка';
+    }
+    
     setState(() {});
+  }
+
+  void _saveToHistory() {
+    String historyEntry = '$amount $fromCurrency → $result $toCurrency';
+    widget.history.add(historyEntry);
+    
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Сохранено в историю')),
+    );
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _convert();
   }
 
   @override
@@ -61,7 +86,9 @@ class _ConverterScreenState extends State<ConverterScreen> {
             onPressed: () {
               Navigator.push(
                 context,
-                MaterialPageRoute(builder: (context) => const HistoryScreen()),
+                MaterialPageRoute(
+                  builder: (context) => HistoryScreen(history: widget.history),
+                ),
               );
             },
           ),
@@ -87,7 +114,7 @@ class _ConverterScreenState extends State<ConverterScreen> {
               controller: TextEditingController(text: amount),
               onChanged: (value) {
                 amount = value.isEmpty ? '0' : value;
-                setState(() {});
+                _convert();
               },
             ),
             const SizedBox(height: 20),
@@ -112,7 +139,7 @@ class _ConverterScreenState extends State<ConverterScreen> {
               onChanged: (value) {
                 if (value != null) {
                   fromCurrency = value;
-                  setState(() {});
+                  _convert();
                 }
               },
             ),
@@ -138,28 +165,29 @@ class _ConverterScreenState extends State<ConverterScreen> {
               onChanged: (value) {
                 if (value != null) {
                   toCurrency = value;
-                  setState(() {});
+                  _convert();
                 }
               },
             ),
-            const SizedBox(height: 30),
+            const SizedBox(height: 20),
             
-          
-            ElevatedButton(
-              onPressed: _convert,
+            // Кнопка сохранения в историю
+            ElevatedButton.icon(
+              onPressed: _saveToHistory,
+              icon: const Icon(Icons.save),
+              label: const Text('Сохранить результат в историю'),
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.blue.shade600,
+                backgroundColor: Colors.green.shade600,
                 foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 16),
+                padding: const EdgeInsets.symmetric(vertical: 12),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
               ),
-              child: const Text('Конвертировать', style: TextStyle(fontSize: 18)),
             ),
             const SizedBox(height: 30),
             
-          
+            // Результат
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
@@ -194,7 +222,9 @@ class _ConverterScreenState extends State<ConverterScreen> {
           if (index == 0) {
             Navigator.pushReplacement(
               context,
-              MaterialPageRoute(builder: (context) => const CalculatorScreen()),
+              MaterialPageRoute(
+                builder: (context) => CalculatorScreen(),
+              ),
             );
           }
         },
