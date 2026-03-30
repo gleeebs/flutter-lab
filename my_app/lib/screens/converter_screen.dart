@@ -1,82 +1,79 @@
 import 'package:flutter/material.dart';
+import '../viewmodels/converter_viewmodel.dart';
+import '../services/exchange_api_service.dart';
+import '../repositories/history_repository.dart';
 import 'calculator_screen.dart';
 import 'history_screen.dart';
 
 class ConverterScreen extends StatefulWidget {
   final List<String> history;
-  const ConverterScreen({super.key, required this.history});
+  final HistoryRepository repository;
+  final String? initialAmount;
+  final String? initialFromCurrency;
+  final String? initialToCurrency;
+  final String? initialResult;
+  
+  const ConverterScreen({
+    super.key,
+    required this.history,
+    required this.repository,
+    this.initialAmount,
+    this.initialFromCurrency,
+    this.initialToCurrency,
+    this.initialResult,
+  });
 
   @override
   State<ConverterScreen> createState() => _ConverterScreenState();
 }
 
 class _ConverterScreenState extends State<ConverterScreen> {
-  String fromCurrency = 'RUB';
-  String toCurrency = 'USD';
-  String amount = '1000';
-  String result = '0.00';
-  
-  // Примерные курсы для демонстрации (без API)
-  final Map<String, double> rates = {
-    'RUB': 1.0,
-    'USD': 0.011,
-    'EUR': 0.010,
-    'GBP': 0.0086,
-    'CNY': 0.079,
-    'JPY': 1.64,
-    'KRW': 16.0,
-    'TRY': 0.41,
-    'KZT': 5.8,
-    'CHF': 0.0098,
-  };
-  
-  final Map<String, String> currencies = {
-    'RUB': '🇷🇺 Российский рубль',
-    'USD': '🇺🇸 Доллар США',
-    'EUR': '🇪🇺 Евро',
-    'GBP': '🇬🇧 Фунт стерлингов',
-    'CNY': '🇨🇳 Китайский юань',
-    'JPY': '🇯🇵 Японская иена',
-    'KRW': '🇰🇷 Южнокорейская вона',
-    'TRY': '🇹🇷 Турецкая лира',
-    'KZT': '🇰🇿 Казахстанский тенге',
-    'CHF': '🇨🇭 Швейцарский франк',
-  };
-
-  void _convert() {
-    double amountNum = double.tryParse(amount) ?? 0;
-    
-    if (fromCurrency == toCurrency) {
-      result = amountNum.toStringAsFixed(2);
-    } else if (rates.containsKey(fromCurrency) && rates.containsKey(toCurrency)) {
-      // Конвертируем через RUB как базовую валюту
-      double inRub = amountNum / rates[fromCurrency]!;
-      double converted = inRub * rates[toCurrency]!;
-      result = converted.toStringAsFixed(2);
-    } else {
-      result = 'Ошибка';
-    }
-    
-    setState(() {});
-  }
-
-  void _saveToHistory() {
-    String historyEntry = '$amount $fromCurrency → $result $toCurrency';
-    widget.history.add(historyEntry);
-    
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Сохранено в историю')),
-    );
-  }
+  ConverterViewModel? _viewModel;
+  bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
-    _convert();
+    _initViewModel();
+  }
+
+  Future<void> _initViewModel() async {
+    final apiService = ExchangeApiService();
+    final viewModel = ConverterViewModel(
+      apiService: apiService,
+      historyRepository: widget.repository,
+    );
+    await viewModel.loadHistory();
+    
+    if (widget.initialAmount != null) {
+      viewModel.amount = widget.initialAmount!;
+    }
+    if (widget.initialFromCurrency != null) {
+      viewModel.fromCurrency = widget.initialFromCurrency!;
+    }
+    if (widget.initialToCurrency != null) {
+      viewModel.toCurrency = widget.initialToCurrency!;
+    }
+    if (widget.initialResult != null) {
+      viewModel.result = widget.initialResult!;
+    }
+    
+    await viewModel.fetchRates();
+    
+    setState(() {
+      _viewModel = viewModel;
+      _isLoading = false;
+    });
   }
 
   @override
   Widget build(BuildContext context) {
+    if (_isLoading || _viewModel == null) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('Конвертер валют'),
@@ -87,9 +84,20 @@ class _ConverterScreenState extends State<ConverterScreen> {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (context) => HistoryScreen(history: widget.history),
+                  builder: (context) => HistoryScreen(
+                    history: _viewModel!.history,
+                    repository: widget.repository,
+                  ),
                 ),
-              );
+              ).then((_) {
+                _viewModel!.loadHistory().then((_) => setState(() {}));
+              });
+            },
+          ),
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: () {
+              _viewModel!.fetchRates().then((_) => setState(() {}));
             },
           ),
         ],
@@ -99,7 +107,6 @@ class _ConverterScreenState extends State<ConverterScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Поле ввода суммы
             TextField(
               decoration: InputDecoration(
                 labelText: 'Сумма',
@@ -109,17 +116,30 @@ class _ConverterScreenState extends State<ConverterScreen> {
                 ),
                 filled: true,
                 fillColor: Colors.grey.shade50,
+                suffixIcon: _viewModel!.amount.isNotEmpty && _viewModel!.amount != '0'
+                    ? IconButton(
+                        icon: const Icon(Icons.clear, size: 20),
+                        onPressed: () {
+                          _viewModel!.updateAmount('0');
+                          setState(() {});
+                        },
+                      )
+                    : null,
               ),
               keyboardType: TextInputType.number,
-              controller: TextEditingController(text: amount),
+              controller: TextEditingController(text: _viewModel!.amount),
               onChanged: (value) {
-                amount = value.isEmpty ? '0' : value;
-                _convert();
+                String filtered = value.replaceAll(RegExp(r'[^0-9.]'), '');
+                if (filtered.contains('.') && filtered.indexOf('.') != filtered.lastIndexOf('.')) {
+                  filtered = filtered.substring(0, filtered.lastIndexOf('.'));
+                }
+                if (filtered.isEmpty) filtered = '0';
+                _viewModel!.updateAmount(filtered);
+                setState(() {});
               },
             ),
             const SizedBox(height: 20),
             
-            // Выбор исходной валюты
             DropdownButtonFormField<String>(
               decoration: InputDecoration(
                 labelText: 'Из валюты',
@@ -129,8 +149,8 @@ class _ConverterScreenState extends State<ConverterScreen> {
                 filled: true,
                 fillColor: Colors.grey.shade50,
               ),
-              value: fromCurrency,
-              items: currencies.entries.map((entry) {
+              value: _viewModel!.fromCurrency,
+              items: _viewModel!.currencies.entries.map((entry) {
                 return DropdownMenuItem(
                   value: entry.key,
                   child: Text(entry.value),
@@ -138,14 +158,13 @@ class _ConverterScreenState extends State<ConverterScreen> {
               }).toList(),
               onChanged: (value) {
                 if (value != null) {
-                  fromCurrency = value;
-                  _convert();
+                  _viewModel!.updateFromCurrency(value);
+                  setState(() {});
                 }
               },
             ),
             const SizedBox(height: 20),
             
-            // Выбор целевой валюты
             DropdownButtonFormField<String>(
               decoration: InputDecoration(
                 labelText: 'В валюту',
@@ -155,8 +174,8 @@ class _ConverterScreenState extends State<ConverterScreen> {
                 filled: true,
                 fillColor: Colors.grey.shade50,
               ),
-              value: toCurrency,
-              items: currencies.entries.map((entry) {
+              value: _viewModel!.toCurrency,
+              items: _viewModel!.currencies.entries.map((entry) {
                 return DropdownMenuItem(
                   value: entry.key,
                   child: Text(entry.value),
@@ -164,16 +183,21 @@ class _ConverterScreenState extends State<ConverterScreen> {
               }).toList(),
               onChanged: (value) {
                 if (value != null) {
-                  toCurrency = value;
-                  _convert();
+                  _viewModel!.updateToCurrency(value);
+                  setState(() {});
                 }
               },
             ),
             const SizedBox(height: 20),
             
-            // Кнопка сохранения в историю
             ElevatedButton.icon(
-              onPressed: _saveToHistory,
+              onPressed: () async {
+                await _viewModel!.saveToHistory();
+                setState(() {});
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Сохранено в историю')),
+                );
+              },
               icon: const Icon(Icons.save),
               label: const Text('Сохранить результат в историю'),
               style: ElevatedButton.styleFrom(
@@ -187,7 +211,6 @@ class _ConverterScreenState extends State<ConverterScreen> {
             ),
             const SizedBox(height: 30),
             
-            // Результат
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
@@ -199,17 +222,29 @@ class _ConverterScreenState extends State<ConverterScreen> {
                 children: [
                   const Text('Результат:', style: TextStyle(color: Colors.grey)),
                   const SizedBox(height: 10),
-                  Text(
-                    result,
-                    style: const TextStyle(
-                      fontSize: 40, 
-                      fontWeight: FontWeight.bold, 
-                      color: Colors.blue,
+                  if (_viewModel!.isLoading)
+                    const CircularProgressIndicator()
+                  else if (_viewModel!.errorMessage != null)
+                    Text(
+                      _viewModel!.errorMessage!,
+                      style: const TextStyle(color: Colors.red),
+                      textAlign: TextAlign.center,
+                    )
+                  else
+                    Text(
+                      _viewModel!.result,
+                      style: const TextStyle(
+                        fontSize: 40,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.blue,
+                      ),
                     ),
-                  ),
                   const SizedBox(height: 5),
-                  Text('$amount $fromCurrency → $toCurrency', 
-                    style: TextStyle(color: Colors.grey.shade600)),
+                  if (!_viewModel!.isLoading && _viewModel!.errorMessage == null)
+                    Text(
+                      '${_viewModel!.amount} ${_viewModel!.fromCurrency} → ${_viewModel!.toCurrency}',
+                      style: TextStyle(color: Colors.grey.shade600),
+                    ),
                 ],
               ),
             ),
@@ -223,7 +258,7 @@ class _ConverterScreenState extends State<ConverterScreen> {
             Navigator.pushReplacement(
               context,
               MaterialPageRoute(
-                builder: (context) => CalculatorScreen(),
+                builder: (context) => const CalculatorScreen(),
               ),
             );
           }

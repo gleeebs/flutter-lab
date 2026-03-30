@@ -1,182 +1,63 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import '../viewmodels/calculator_viewmodel.dart';
+import '../repositories/history_repository.dart';
 import 'converter_screen.dart';
 import 'history_screen.dart';
-import 'dart:math';
 
 class CalculatorScreen extends StatefulWidget {
-  const CalculatorScreen({super.key});
+  final String? initialExpression;
+  final String? initialResult;
+  final List<String>? history;
+  final HistoryRepository? repository;
+  
+  const CalculatorScreen({
+    super.key,
+    this.initialExpression,
+    this.initialResult,
+    this.history,
+    this.repository,
+  });
 
   @override
   State<CalculatorScreen> createState() => _CalculatorScreenState();
 }
 
 class _CalculatorScreenState extends State<CalculatorScreen> {
-  String display = '0';
-  String _currentOperation = '';
-  double? _firstNumber;
-  bool _isNewOperation = true;
-  bool _isDecimal = false;
-  
-  // Список для истории
-  List<String> history = [];
+  CalculatorViewModel? _viewModel;
+  bool _isLoading = true;
 
-  void _buttonPressed(String value) {
+  @override
+  void initState() {
+    super.initState();
+    _initViewModel();
+  }
+
+  Future<void> _initViewModel() async {
+    final prefs = await SharedPreferences.getInstance();
+    final repo = widget.repository ?? HistoryRepository(prefs);
+    final viewModel = CalculatorViewModel(historyRepository: repo);
+    await viewModel.loadHistory();
+    
+    // Если есть начальные значения из истории
+    if (widget.initialExpression != null && widget.initialResult != null) {
+      viewModel.setExpressionAndResult(widget.initialExpression!, widget.initialResult!);
+    }
+    
     setState(() {
-      if (value == 'C') {
-        // Полная очистка
-        display = '0';
-        _currentOperation = '';
-        _firstNumber = null;
-        _isNewOperation = true;
-        _isDecimal = false;
-      } 
-      else if (value == 'CE') {
-        // Очистка текущего ввода
-        display = '0';
-        _isNewOperation = true;
-        _isDecimal = false;
-      }
-      else if (value == '⌫') {
-        // Удаление последнего символа
-        if (display.length > 1) {
-          display = display.substring(0, display.length - 1);
-          if (display == '-') display = '0';
-        } else {
-          display = '0';
-          _isNewOperation = true;
-        }
-        _isDecimal = display.contains('.');
-      }
-      else if (value == '=') {
-        _calculateResult();
-      }
-      else if (value == '+' || value == '-' || value == '×' || value == '÷') {
-        if (_firstNumber != null && !_isNewOperation) {
-          _calculateResult();
-        }
-        _firstNumber = double.parse(display);
-        _currentOperation = value;
-        _isNewOperation = true;
-        _isDecimal = false;
-      }
-      else if (value == '%') {
-        double num = double.parse(display);
-        display = (num / 100).toString();
-        _removeTrailingZero();
-        _isNewOperation = false;
-      }
-      else if (value == '+/-') {
-        if (display.startsWith('-')) {
-          display = display.substring(1);
-        } else if (display != '0') {
-          display = '-$display';
-        }
-      }
-      else if (value == '1/x') {
-        double num = double.parse(display);
-        if (num != 0) {
-          display = (1 / num).toString();
-          _removeTrailingZero();
-        } else {
-          display = 'Ошибка';
-        }
-        _isNewOperation = true;
-      }
-      else if (value == 'xʸ') {
-        _firstNumber = double.parse(display);
-        _currentOperation = '^';
-        _isNewOperation = true;
-        _isDecimal = false;
-      }
-      else if (value == '√x') {
-        double num = double.parse(display);
-        if (num >= 0) {
-          display = sqrt(num).toString();
-          _removeTrailingZero();
-        } else {
-          display = 'Ошибка';
-        }
-        _isNewOperation = true;
-      }
-      else if (value == ',') {
-        if (!_isDecimal) {
-          display += '.';
-          _isDecimal = true;
-        }
-        _isNewOperation = false;
-      }
-      else {
-        // Цифры
-        if (_isNewOperation) {
-          display = value;
-          _isNewOperation = false;
-        } else {
-          display = (display == '0') ? value : display + value;
-        }
-        _isDecimal = display.contains('.');
-      }
+      _viewModel = viewModel;
+      _isLoading = false;
     });
-  }
-
-  void _calculateResult() {
-    if (_firstNumber != null && _currentOperation.isNotEmpty) {
-      double secondNumber = double.parse(display);
-      double result = 0;
-      
-      switch (_currentOperation) {
-        case '+':
-          result = _firstNumber! + secondNumber;
-          break;
-        case '-':
-          result = _firstNumber! - secondNumber;
-          break;
-        case '×':
-          result = _firstNumber! * secondNumber;
-          break;
-        case '÷':
-          if (secondNumber != 0) {
-            result = _firstNumber! / secondNumber;
-          } else {
-            display = 'Ошибка';
-            return;
-          }
-          break;
-        case '^':
-          result = pow(_firstNumber!, secondNumber).toDouble();
-          break;
-      }
-      
-      // Сохраняем в историю
-      String historyEntry = '${_formatNumber(_firstNumber!)} $_currentOperation ${_formatNumber(secondNumber)} = ${_formatNumber(result)}';
-      history.add(historyEntry);
-      
-      display = _formatNumber(result);
-      _removeTrailingZero();
-      _firstNumber = null;
-      _currentOperation = '';
-      _isNewOperation = true;
-      _isDecimal = display.contains('.');
-    }
-  }
-
-  String _formatNumber(double num) {
-    if (num == num.toInt()) {
-      return num.toInt().toString();
-    }
-    return num.toString();
-  }
-
-  void _removeTrailingZero() {
-    if (display.contains('.')) {
-      display = display.replaceAll(RegExp(r'0*$'), '');
-      if (display.endsWith('.')) {
-        display = display.substring(0, display.length - 1);
-      }
-    }
   }
 
   @override
   Widget build(BuildContext context) {
+    if (_isLoading || _viewModel == null) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+
     return Scaffold(
       appBar: AppBar(
         title: const Text('EasyCalc'),
@@ -187,27 +68,50 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (context) => HistoryScreen(history: history),
+                  builder: (context) => HistoryScreen(
+                    history: _viewModel!.history,
+                    repository: _viewModel!.historyRepository,
+                  ),
                 ),
-              );
+              ).then((_) {
+                _viewModel!.loadHistory().then((_) => setState(() {}));
+              });
             },
           ),
         ],
       ),
       body: Column(
         children: [
-          // Дисплей
+          // Дисплей с двумя строками
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
-            alignment: Alignment.bottomRight,
+            padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
             width: double.infinity,
-            child: Text(
-              display,
-              style: const TextStyle(
-                fontSize: 64,
-                fontWeight: FontWeight.w500,
-                color: Colors.black87,
-              ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                // Маленькая строка с выражением
+                Text(
+                  _viewModel!.expression,
+                  style: TextStyle(
+                    fontSize: 20,
+                    color: Colors.grey.shade600,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 8),
+                // Большая строка с результатом
+                Text(
+                  _viewModel!.displayValue,
+                  style: const TextStyle(
+                    fontSize: 48,
+                    fontWeight: FontWeight.w500,
+                    color: Colors.black87,
+                  ),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
             ),
           ),
           
@@ -217,78 +121,23 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
               padding: const EdgeInsets.all(12),
               child: Column(
                 children: [
-                  // Ряд 1: %, CE, C, ⌫
-                  Expanded(
-                    child: Row(
-                      children: [
-                        _calcButton('%', Colors.grey.shade200, Colors.black87),
-                        _calcButton('CE', Colors.grey.shade200, Colors.black87),
-                        _calcButton('C', Colors.grey.shade200, Colors.black87),
-                        _calcButton('⌫', Colors.grey.shade200, Colors.black87),
-                      ],
-                    ),
-                  ),
-                  // Ряд 2: 1/x, xʸ, √x, ÷
-                  Expanded(
-                    child: Row(
-                      children: [
-                        _calcButton('1/x', Colors.grey.shade200, Colors.black87),
-                        _calcButton('xʸ', Colors.grey.shade200, Colors.black87),
-                        _calcButton('√x', Colors.grey.shade200, Colors.black87),
-                        _calcButton('÷', Colors.blue.shade600, Colors.white),
-                      ],
-                    ),
-                  ),
-                  // Ряд 3: 7, 8, 9, ×
-                  Expanded(
-                    child: Row(
-                      children: [
-                        _calcButton('7', Colors.white, Colors.black87),
-                        _calcButton('8', Colors.white, Colors.black87),
-                        _calcButton('9', Colors.white, Colors.black87),
-                        _calcButton('×', Colors.blue.shade600, Colors.white),
-                      ],
-                    ),
-                  ),
-                  // Ряд 4: 4, 5, 6, -
-                  Expanded(
-                    child: Row(
-                      children: [
-                        _calcButton('4', Colors.white, Colors.black87),
-                        _calcButton('5', Colors.white, Colors.black87),
-                        _calcButton('6', Colors.white, Colors.black87),
-                        _calcButton('-', Colors.blue.shade600, Colors.white),
-                      ],
-                    ),
-                  ),
-                  // Ряд 5: 1, 2, 3, +
-                  Expanded(
-                    child: Row(
-                      children: [
-                        _calcButton('1', Colors.white, Colors.black87),
-                        _calcButton('2', Colors.white, Colors.black87),
-                        _calcButton('3', Colors.white, Colors.black87),
-                        _calcButton('+', Colors.blue.shade600, Colors.white),
-                      ],
-                    ),
-                  ),
-                  // Ряд 6: +/-, 0, ,, =
-                  Expanded(
-                    child: Row(
-                      children: [
-                        _calcButton('+/-', Colors.white, Colors.black87),
-                        _calcButton('0', Colors.white, Colors.black87),
-                        _calcButton(',', Colors.white, Colors.black87),
-                        _calcButton('=', Colors.blue.shade600, Colors.white),
-                      ],
-                    ),
-                  ),
+                  _buildButtonRow(['%', 'CE', 'C', '⌫'], 
+                    [Colors.white, Colors.white, Colors.white, Colors.white]),
+                  _buildButtonRow(['1/x', 'xʸ', '√x', '÷'],
+                    [Colors.white, Colors.white, Colors.white, Colors.blue.shade600]),
+                  _buildButtonRow(['7', '8', '9', '×'],
+                    [Colors.white, Colors.white, Colors.white, Colors.blue.shade600]),
+                  _buildButtonRow(['4', '5', '6', '-'],
+                    [Colors.white, Colors.white, Colors.white, Colors.blue.shade600]),
+                  _buildButtonRow(['1', '2', '3', '+'],
+                    [Colors.white, Colors.white, Colors.white, Colors.blue.shade600]),
+                  _buildButtonRow(['+/-', '0', ',', '='],
+                    [Colors.white, Colors.white, Colors.white, Colors.blue.shade600]),
                 ],
               ),
             ),
           ),
           
-          // Нижняя навигация
           BottomNavigationBar(
             currentIndex: 0,
             onTap: (index) {
@@ -296,7 +145,10 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
                 Navigator.pushReplacement(
                   context,
                   MaterialPageRoute(
-                    builder: (context) => ConverterScreen(history: history),
+                    builder: (context) => ConverterScreen(
+                      history: _viewModel!.history,
+                      repository: _viewModel!.historyRepository,
+                    ),
                   ),
                 );
               }
@@ -318,7 +170,17 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
     );
   }
 
-  Widget _calcButton(String text, Color bgColor, Color textColor) {
+  Widget _buildButtonRow(List<String> texts, List<Color> colors) {
+    return Expanded(
+      child: Row(
+        children: List.generate(texts.length, (index) {
+          return _calcButton(texts[index], colors[index]);
+        }),
+      ),
+    );
+  }
+
+  Widget _calcButton(String text, Color bgColor) {
     return Expanded(
       child: Padding(
         padding: const EdgeInsets.all(4),
@@ -331,7 +193,11 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
           child: Material(
             color: Colors.transparent,
             child: InkWell(
-              onTap: () => _buttonPressed(text),
+              onTap: () {
+                setState(() {
+                  _viewModel!.buttonPressed(text);
+                });
+              },
               borderRadius: BorderRadius.circular(8),
               child: Center(
                 child: Text(
@@ -339,7 +205,7 @@ class _CalculatorScreenState extends State<CalculatorScreen> {
                   style: TextStyle(
                     fontSize: text == '0' ? 24 : 20,
                     fontWeight: FontWeight.w500,
-                    color: textColor,
+                    color: bgColor == Colors.white ? Colors.black87 : Colors.white,
                   ),
                 ),
               ),
